@@ -1,6 +1,6 @@
 # Chai
 
-**Don't let your hackathon project die on Sunday night.**
+**Don't let your hackathon project die on Sunday night. Advance your project just as easy as drinking a chai**
 
 ## The problem
 

@@ -56,23 +56,33 @@ export class Butterbase {
     const url = this.cfg.butterbase.appId
       ? `${base}/v1/${this.cfg.butterbase.appId}/chat/completions`
       : `${base}/v1/chat/completions`;
-    try {
-      const res = await getJson<any>(url, {
-        method: "POST",
-        headers: this.authHeader(),
-        body: {
-          model: this.cfg.butterbase.model,
-          messages,
-          max_tokens: opts.maxTokens ?? 2400,
-          temperature: 0.4,
-        },
-        timeoutMs: 60_000,
-      });
-      return res?.choices?.[0]?.message?.content ?? "";
-    } catch (err) {
-      // Never let a gateway hiccup kill a demo.
-      return localCompletion(messages, opts.json ?? false);
+    const body = {
+      model: this.cfg.butterbase.model,
+      messages,
+      max_tokens: opts.maxTokens ?? 2400,
+      temperature: 0.4,
+    };
+    // One retry with backoff smooths over transient 402/429/5xx blips that can
+    // happen under load on a low balance — keeps the demo on the real model.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await getJson<any>(url, {
+          method: "POST",
+          headers: this.authHeader(),
+          body,
+          timeoutMs: 60_000,
+        });
+        return res?.choices?.[0]?.message?.content ?? "";
+      } catch (err) {
+        if (attempt === 0) {
+          await new Promise((r) => setTimeout(r, 1200));
+          continue;
+        }
+        warnGatewayOnce((err as any)?.message ?? String(err));
+        return localCompletion(messages, opts.json ?? false);
+      }
     }
+    return localCompletion(messages, opts.json ?? false);
   }
 
   /** Convenience: ask for JSON and parse it defensively. */
@@ -125,6 +135,19 @@ export class Butterbase {
 }
 
 // ── Local fallback "LLM": deterministic, structured, good enough to demo ─────
+
+let gatewayWarned = false;
+/** Print a one-time, visible warning when the live gateway call fails. */
+function warnGatewayOnce(message: string): void {
+  if (gatewayWarned) return;
+  gatewayWarned = true;
+  const credits = /insufficient credits|402/i.test(message);
+  console.warn(
+    `\n⚠️  Butterbase AI gateway call failed — falling back to offline heuristics.` +
+      (credits ? `\n   Reason: insufficient credits. Top up or switch BUTTERBASE_API_KEY.` : `\n   Reason: ${message.slice(0, 160)}`) +
+      `\n`,
+  );
+}
 
 function localCompletion(messages: ChatMessage[], json: boolean): string {
   const user = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
