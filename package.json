@@ -1,0 +1,32 @@
+{
+  "name": "momentum",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Momentum keeps your hackathon projects alive: it inspects your GitHub repos, tracks related OSS/startups/investors and fresh research, suggests improvements, cross-pollinates your projects into startup ideas, and delivers it over messaging.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "demo": "tsx src/scripts/demo.ts",
+    "analyze": "tsx src/index.ts analyze",
+    "fuse": "tsx src/index.ts fuse",
+    "digest": "tsx src/index.ts digest",
+    "agent": "tsx src/index.ts agent",
+    "provision": "tsx src/index.ts provision",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  },
+  "optionalDependencies": {
+    "@xtraceai/memory": "*",
+    "spectrum-ts": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
