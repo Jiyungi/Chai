@@ -22,6 +22,10 @@ export class GitHubInspector {
 
   /** List a user's repos, newest activity first, with light enrichment. */
   async listRepos(limit = 12): Promise<{ repos: Repo[]; live: boolean }> {
+    // Sample mode: use the curated portfolio (great for demos / no GH account).
+    if (process.env.MOMENTUM_SAMPLE === "1" || this.cfg.github.username === "sample") {
+      return { repos: sampleRepos(), live: false };
+    }
     const user = this.cfg.github.username;
     const url = `https://api.github.com/users/${encodeURIComponent(
       user,
