@@ -1,0 +1,52 @@
+{
+  "version": "1.0",
+  "name": "weekly-digest",
+  "description": "Recall prior facts, diff against new signals to find what changed, build a digest, and deliver it over messaging.",
+  "nodes": [
+    {
+      "id": "recall",
+      "type": "memory.persistent",
+      "category": "Memory",
+      "label": "Recall prior facts (XTrace)",
+      "config": {}
+    },
+    {
+      "id": "new",
+      "type": "source.dropper",
+      "category": "Source",
+      "label": "Latest reports",
+      "config": {}
+    },
+    {
+      "id": "diff",
+      "type": "llm.anthropic",
+      "category": "LLM",
+      "label": "What changed since last week",
+      "config": {}
+    },
+    {
+      "id": "deliver",
+      "type": "tool.http",
+      "category": "Tool",
+      "label": "Deliver digest (Spectrum / Photon)",
+      "config": {}
+    }
+  ],
+  "lanes": [
+    {
+      "from": "recall",
+      "to": "diff",
+      "lane": "data"
+    },
+    {
+      "from": "new",
+      "to": "diff",
+      "lane": "data"
+    },
+    {
+      "from": "diff",
+      "to": "deliver",
+      "lane": "data"
+    }
+  ]
+}

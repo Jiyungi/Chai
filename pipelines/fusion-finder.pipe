@@ -1,0 +1,54 @@
+{
+  "version": "1.0",
+  "name": "fusion-finder",
+  "description": "Read the full portfolio of repo reports and propose 2+ project fusions worth turning into a startup.",
+  "nodes": [
+    {
+      "id": "reports",
+      "type": "source.dropper",
+      "category": "Source",
+      "label": "All repo reports",
+      "config": {}
+    },
+    {
+      "id": "fuse",
+      "type": "llm.anthropic",
+      "category": "LLM",
+      "label": "Cross-pollinate into startup ideas",
+      "config": {
+        "model": "anthropic/claude-3.5-sonnet"
+      }
+    },
+    {
+      "id": "rank",
+      "type": "text.transform",
+      "category": "Text",
+      "label": "Rank by venture potential",
+      "config": {}
+    },
+    {
+      "id": "store",
+      "type": "infra.export",
+      "category": "Infrastructure",
+      "label": "Persist fusions (Butterbase)",
+      "config": {}
+    }
+  ],
+  "lanes": [
+    {
+      "from": "reports",
+      "to": "fuse",
+      "lane": "data"
+    },
+    {
+      "from": "fuse",
+      "to": "rank",
+      "lane": "data"
+    },
+    {
+      "from": "rank",
+      "to": "store",
+      "lane": "data"
+    }
+  ]
+}
