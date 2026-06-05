@@ -5,7 +5,7 @@ import { Spectrum } from "./integrations/spectrum.js";
 import { renderReport, renderFusions } from "./lib/render.js";
 
 /**
- * Momentum CLI.
+ * Chai CLI.
  *   analyze   inspect repos → trends + suggestions
  *   fuse      cross-repo startup ideas
  *   digest    build + deliver a weekly digest over Spectrum
@@ -16,9 +16,16 @@ async function main() {
   const cmd = process.argv[2] ?? "analyze";
   const cfg = loadConfig();
   const engine = new MomentumEngine(cfg);
+  await engine.init();
 
-  console.log(`\nMomentum · keep your hackathon ideas alive`);
-  console.log(`mode: ${describeMode(cfg)}  ·  user: ${cfg.github.username}\n`);
+  console.log(`\nChai · keep your hackathon ideas alive`);
+  console.log(`mode: ${describeMode(cfg)}  ·  user: ${cfg.github.username}`);
+  const rrStatus = engine.engineSynthesis
+    ? "live engine (synthesis routed through llm_openai_api → Butterbase)"
+    : engine.engineReachable
+      ? "live engine (orchestration; set ROCKETRIDE_SYNTHESIS=1 to route LLM through it)"
+      : "in-process DAG (engine not running)";
+  console.log(`rocketride: ${rrStatus}\n`);
 
   switch (cmd) {
     case "provision": {
@@ -67,12 +74,15 @@ async function main() {
 
     default:
       console.log(`Unknown command: ${cmd}`);
-      console.log("Usage: momentum <analyze|fuse|digest|agent|provision>");
+      console.log("Usage: chai <analyze|fuse|digest|agent|provision>");
+      await engine.shutdown();
       process.exit(1);
   }
+
+  await engine.shutdown();
 }
 
 main().catch((err) => {
-  console.error("Momentum error:", err?.message ?? err);
+  console.error("Chai error:", err?.message ?? err);
   process.exit(1);
 });

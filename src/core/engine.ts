@@ -1,11 +1,12 @@
 import type { MomentumConfig } from "../config.js";
 import { GitHubInspector } from "../integrations/github.js";
 import { Butterbase } from "../integrations/butterbase.js";
+import type { ChatMessage } from "../integrations/butterbase.js";
 import { Memory } from "../integrations/xtrace.js";
 import { Discovery } from "../integrations/discovery.js";
 import { RocketRide } from "../integrations/rocketride.js";
 import { suggestImprovements, findFusions } from "./synthesis.js";
-import { repoRadarPipe, fusionFinderPipe, digestPipe } from "./pipelines.js";
+import { repoRadarPipe, fusionFinderPipe, digestPipe, butterbaseLlmPipe } from "./pipelines.js";
 import type { Repo, Signal, RepoReport, FusionIdea, Digest } from "../types.js";
 
 /**
@@ -29,6 +30,40 @@ export class MomentumEngine {
     this.memory = new Memory(cfg);
     this.discovery = new Discovery(cfg);
     this.rocket = new RocketRide(cfg);
+  }
+
+  /** Whether synthesis is currently routed through the live RocketRide engine. */
+  engineSynthesis = false;
+  /** Whether a live RocketRide engine is reachable (orchestration runtime). */
+  engineReachable = false;
+
+  /**
+   * Optional: if the RocketRide engine is reachable AND Butterbase is live,
+   * route LLM synthesis through the engine's `llm_openai_api` node pointed at
+   * the Butterbase gateway. This wires RocketRide + Butterbase together at
+   * runtime and is great to demo. It is gated behind ROCKETRIDE_SYNTHESIS=1
+   * because the local engine under emulation is slow for batch synthesis; when
+   * off, the engine still orchestrates the pipelines but LLM calls go direct to
+   * the gateway. Safe to call always; no-ops when unavailable.
+   */
+  async init(): Promise<void> {
+    if (!this.cfg.butterbase.live) return;
+    this.engineReachable = await this.rocket.engineReachable();
+    if (!this.engineReachable) return;
+    if (process.env.ROCKETRIDE_SYNTHESIS !== "1") return;
+    const system =
+      "You are Chai, an expert hacker-mentor and startup scout. When asked for JSON, output ONLY valid JSON.";
+    const pipe = butterbaseLlmPipe(this.cfg, system);
+    this.bb.setLlmTransport(async (messages: ChatMessage[]) => {
+      const prompt = messages.map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n\n");
+      return this.rocket.runOnEngine(pipe, prompt);
+    });
+    this.engineSynthesis = true;
+  }
+
+  /** Release the live engine connection, if any. */
+  async shutdown(): Promise<void> {
+    await this.rocket.disconnect();
   }
 
   /** Write the canonical `.pipe` files so they open in the RocketRide canvas. */
@@ -210,11 +245,11 @@ function renderDigest(
   }
 
   const text = [
-    "📈 Momentum weekly digest",
+    "📈 Chai weekly digest",
     "",
     ...sections.flatMap((s) => [`${s.heading}`, ...s.bullets.map((b) => `  • ${b}`), ""]),
     "Reply with a repo name for details, or 'fuse' for startup ideas.",
   ].join("\n");
 
-  return { title: "Momentum weekly digest", generatedAt: new Date().toISOString(), sections, text };
+  return { title: "Chai weekly digest", generatedAt: new Date().toISOString(), sections, text };
 }

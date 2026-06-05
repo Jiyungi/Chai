@@ -32,8 +32,10 @@ export class GitHubInspector {
     )}/repos?sort=pushed&per_page=${limit}&type=owner`;
     try {
       const raw = await getJson<any[]>(url, { headers: this.headers() });
+      const allow = this.cfg.github.repos;
       const repos: Repo[] = raw
         .filter((r) => !r.fork)
+        .filter((r) => allow.length === 0 || allow.includes(r.name))
         .map((r) => ({
           name: r.name,
           fullName: r.full_name,

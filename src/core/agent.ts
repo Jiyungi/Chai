@@ -111,7 +111,7 @@ export class MomentumAgent {
       {
         role: "system",
         content:
-          "You are Momentum, a concise hacker-mentor. Answer using ONLY the portfolio and memory provided. " +
+          "You are Chai, a concise hacker-mentor. Answer using ONLY the portfolio and memory provided. " +
           "Be specific, reference repo names, and keep it under 120 words. If unknown, say so.",
       },
       {

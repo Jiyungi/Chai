@@ -2,14 +2,21 @@ import type { MomentumConfig } from "../config.js";
 
 export type MessageHandler = (text: string, reply: (out: string) => Promise<void>) => Promise<void>;
 
+const PROVIDER_ALIASES: Record<string, string> = {
+  whatsapp: "whatsappBusiness",
+  "whatsapp-business": "whatsappBusiness",
+  imsg: "imessage",
+};
+
 /**
  * Spectrum (Photon) = delivery. The agent runs once and reaches users on the
- * interfaces they already use. We support the real `spectrum-ts` providers
- * (iMessage, WhatsApp, terminal) when configured, and a built-in terminal REPL
- * fallback so the conversational agent is demoable without any account.
+ * interfaces they already use. Uses the real `spectrum-ts` SDK (iMessage,
+ * WhatsApp Business, Slack, terminal). A terminal REPL fallback keeps the agent
+ * demoable when no project credentials are present.
  */
 export class Spectrum {
   private app: any | null = null;
+  private imessageFn: any | null = null;
 
   constructor(private cfg: MomentumConfig) {}
 
@@ -17,25 +24,35 @@ export class Spectrum {
     return this.cfg.spectrum.live;
   }
 
-  /** Push a one-off message (e.g. a weekly digest) to every space. */
+  /**
+   * Proactively deliver a message (e.g. the weekly digest) to one recipient.
+   * Spectrum has no "send to everyone" primitive — you resolve a user on a
+   * platform, open/get a space (DM), and send. We target SPECTRUM_DIGEST_TO
+   * (phone or email for iMessage). Without it, we render to the terminal.
+   */
   async broadcast(text: string): Promise<{ delivered: boolean; via: string }> {
-    if (!this.cfg.spectrum.live) {
-      // No credentials: render to stdout as the "terminal" provider would.
-      console.log("\n══════════ Spectrum · terminal delivery ══════════\n");
-      console.log(text);
-      console.log("\n═══════════════════════════════════════════════════\n");
-      return { delivered: true, via: "terminal" };
+    const recipient = this.cfg.spectrum.digestTo;
+    if (this.cfg.spectrum.live && recipient) {
+      try {
+        const app = await this.boot();
+        if (app && this.imessageFn) {
+          const im = this.imessageFn(app);
+          const user = await im.user(recipient);
+          const dm = await im.space(user);
+          await dm.send(text);
+          return { delivered: true, via: `imessage:${recipient}` };
+        }
+      } catch (err) {
+        // fall through to terminal render
+      }
     }
-    try {
-      const app = await this.boot();
-      // In a provisioned project you'd target known spaces; for the hackathon
-      // we surface the API shape and log the payload.
-      if (app?.broadcast) await app.broadcast(text);
-      return { delivered: true, via: this.cfg.spectrum.providers.join("+") };
-    } catch {
-      console.log(text);
-      return { delivered: false, via: "terminal-fallback" };
-    }
+    console.log("\n══════════ Spectrum · terminal delivery ══════════\n");
+    console.log(text);
+    console.log("\n═══════════════════════════════════════════════════\n");
+    return {
+      delivered: true,
+      via: this.cfg.spectrum.live && !recipient ? "terminal (set SPECTRUM_DIGEST_TO to send via iMessage)" : "terminal",
+    };
   }
 
   /**
@@ -47,10 +64,14 @@ export class Spectrum {
     if (this.cfg.spectrum.live) {
       const app = await this.boot();
       if (app) {
+        console.log(
+          `Spectrum live on [${this.cfg.spectrum.providers.join(", ")}]. Waiting for inbound messages…`,
+        );
         for await (const [space, message] of app.messages) {
-          const text = message?.content?.type === "text" ? message.content.text : "";
+          const content = message?.content;
+          const text = content?.type === "text" ? content.text : "";
           if (!text) continue;
-          await app.responding?.(space, async () => {
+          await app.responding(space, async () => {
             await handler(text, async (out) => {
               await space.send(out);
             });
@@ -58,6 +79,7 @@ export class Spectrum {
         }
         return;
       }
+      console.log("Spectrum failed to start with provided credentials; falling back to terminal.\n");
     }
     await this.terminalLoop(handler);
   }
@@ -67,17 +89,31 @@ export class Spectrum {
     try {
       const mod: any = await import("spectrum-ts");
       const providersMod: any = await import("spectrum-ts/providers");
+      const imessageMod: any = await import("spectrum-ts/providers/imessage");
+      this.imessageFn = imessageMod.imessage;
       const providers = this.cfg.spectrum.providers
-        .map((name) => providersMod[name]?.config?.())
+        .map((name) => {
+          const key = PROVIDER_ALIASES[name] ?? name;
+          return providersMod[key]?.config?.();
+        })
         .filter(Boolean);
       this.app = await mod.Spectrum({
         projectId: this.cfg.spectrum.projectId,
         projectSecret: this.cfg.spectrum.projectSecret,
-        providers: providers.length ? providers : undefined,
+        providers: providers.length ? providers : [providersMod.terminal.config()],
       });
       return this.app;
-    } catch {
+    } catch (err) {
+      console.error("Spectrum boot error:", (err as any)?.message ?? err);
       return null;
+    }
+  }
+
+  async stop(): Promise<void> {
+    try {
+      await this.app?.stop?.();
+    } catch {
+      /* ignore */
     }
   }
 
@@ -86,7 +122,7 @@ export class Spectrum {
     const readline = await import("node:readline/promises");
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     console.log(
-      "\nMomentum agent (terminal provider). Ask about your repos, trends, or fusions. Type 'exit' to quit.\n",
+      "\nChai agent (terminal provider). Ask about your repos, trends, or fusions. Type 'exit' to quit.\n",
     );
     try {
       while (true) {
@@ -94,7 +130,7 @@ export class Spectrum {
         if (!text) continue;
         if (["exit", "quit", ":q"].includes(text.toLowerCase())) break;
         await handler(text, async (out) => {
-          console.log(`\nmomentum › ${out}\n`);
+          console.log(`\nchai › ${out}\n`);
         });
       }
     } finally {

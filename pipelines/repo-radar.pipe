@@ -1,122 +1,110 @@
 {
-  "version": "1.0",
+  "version": 1,
   "name": "repo-radar",
   "description": "Inspect a GitHub repo, gather related OSS + startups + papers, synthesize improvement suggestions, write to memory, and persist.",
-  "nodes": [
+  "source": "src",
+  "project_id": "momentum-repo-radar",
+  "components": [
     {
       "id": "src",
-      "type": "source.webhook",
-      "category": "Source",
-      "label": "Repo input",
-      "config": {}
-    },
-    {
-      "id": "github",
-      "type": "tool.github",
-      "category": "Tool",
-      "label": "Inspect repo (README, languages)",
-      "config": {}
-    },
-    {
-      "id": "oss",
-      "type": "search.web",
-      "category": "Search",
-      "label": "Related OSS (GitHub search)",
-      "config": {}
-    },
-    {
-      "id": "papers",
-      "type": "tool.http",
-      "category": "Tool",
-      "label": "Related papers (arXiv)",
-      "config": {}
-    },
-    {
-      "id": "startups",
-      "type": "tool.http",
-      "category": "Tool",
-      "label": "Startups + investors (sector KB)",
-      "config": {}
-    },
-    {
-      "id": "synthesize",
-      "type": "llm.anthropic",
-      "category": "LLM",
-      "label": "Suggest improvements (Butterbase AI gateway)",
+      "provider": "webhook",
       "config": {
-        "model": "anthropic/claude-3.5-sonnet"
+        "mode": "Source",
+        "type": "webhook"
       }
     },
     {
+      "id": "github",
+      "provider": "tool_github",
+      "config": {},
+      "input": [
+        {
+          "lane": "data",
+          "from": "src"
+        }
+      ]
+    },
+    {
+      "id": "oss",
+      "provider": "search",
+      "config": {},
+      "input": [
+        {
+          "lane": "data",
+          "from": "github"
+        }
+      ]
+    },
+    {
+      "id": "papers",
+      "provider": "tool_http",
+      "config": {},
+      "input": [
+        {
+          "lane": "data",
+          "from": "github"
+        }
+      ]
+    },
+    {
+      "id": "startups",
+      "provider": "tool_http",
+      "config": {},
+      "input": [
+        {
+          "lane": "data",
+          "from": "github"
+        }
+      ]
+    },
+    {
+      "id": "synthesize",
+      "provider": "llm_openai_api",
+      "config": {},
+      "input": [
+        {
+          "lane": "data",
+          "from": "github"
+        },
+        {
+          "lane": "data",
+          "from": "oss"
+        },
+        {
+          "lane": "data",
+          "from": "papers"
+        },
+        {
+          "lane": "data",
+          "from": "startups"
+        }
+      ]
+    },
+    {
       "id": "memory",
-      "type": "memory.persistent",
-      "category": "Memory",
-      "label": "Write durable facts (XTrace)",
-      "config": {}
+      "provider": "tool_http",
+      "config": {},
+      "input": [
+        {
+          "lane": "data",
+          "from": "synthesize"
+        }
+      ]
     },
     {
       "id": "store",
-      "type": "infra.export",
-      "category": "Infrastructure",
-      "label": "Persist report (Butterbase data API)",
-      "config": {}
-    }
-  ],
-  "lanes": [
-    {
-      "from": "src",
-      "to": "github",
-      "lane": "data"
-    },
-    {
-      "from": "github",
-      "to": "oss",
-      "lane": "data"
-    },
-    {
-      "from": "github",
-      "to": "papers",
-      "lane": "data"
-    },
-    {
-      "from": "github",
-      "to": "startups",
-      "lane": "data"
-    },
-    {
-      "from": "github",
-      "to": "synthesize",
-      "lane": "data"
-    },
-    {
-      "from": "oss",
-      "to": "synthesize",
-      "lane": "data"
-    },
-    {
-      "from": "papers",
-      "to": "synthesize",
-      "lane": "data"
-    },
-    {
-      "from": "startups",
-      "to": "synthesize",
-      "lane": "data"
-    },
-    {
-      "from": "synthesize",
-      "to": "memory",
-      "lane": "data"
-    },
-    {
-      "from": "synthesize",
-      "to": "store",
-      "lane": "data"
-    },
-    {
-      "from": "memory",
-      "to": "store",
-      "lane": "data"
+      "provider": "response",
+      "config": {},
+      "input": [
+        {
+          "lane": "data",
+          "from": "synthesize"
+        },
+        {
+          "lane": "data",
+          "from": "memory"
+        }
+      ]
     }
   ]
 }

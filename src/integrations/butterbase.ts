@@ -16,11 +16,19 @@ export interface ChatMessage {
  */
 export class Butterbase {
   private memTables = new Map<string, any[]>();
+  /** Optional transport that routes chat through another runtime (e.g. the
+   *  RocketRide engine's llm_openai_api node). When set, chat() uses it. */
+  private llmTransport: ((messages: ChatMessage[]) => Promise<string | null>) | null = null;
 
   constructor(private cfg: MomentumConfig) {}
 
   get live(): boolean {
     return this.cfg.butterbase.live;
+  }
+
+  /** Inject an alternate LLM transport (used to route via RocketRide). */
+  setLlmTransport(fn: ((messages: ChatMessage[]) => Promise<string | null>) | null): void {
+    this.llmTransport = fn;
   }
 
   private authHeader(): Record<string, string> {
@@ -31,6 +39,16 @@ export class Butterbase {
 
   /** Chat completion via Butterbase. Returns assistant text. */
   async chat(messages: ChatMessage[], opts: { json?: boolean; maxTokens?: number } = {}): Promise<string> {
+    // If a RocketRide-backed transport is wired, prefer it so the call runs
+    // through the engine's llm_openai_api node (RocketRide + Butterbase).
+    if (this.llmTransport) {
+      try {
+        const viaEngine = await this.llmTransport(messages);
+        if (viaEngine && viaEngine.trim()) return viaEngine;
+      } catch {
+        /* fall through to direct gateway call */
+      }
+    }
     if (!this.cfg.butterbase.live) {
       return localCompletion(messages, opts.json ?? false);
     }
@@ -45,9 +63,8 @@ export class Butterbase {
         body: {
           model: this.cfg.butterbase.model,
           messages,
-          max_tokens: opts.maxTokens ?? 1200,
+          max_tokens: opts.maxTokens ?? 2400,
           temperature: 0.4,
-          ...(opts.json ? { response_format: { type: "json_object" } } : {}),
         },
         timeoutMs: 60_000,
       });
@@ -59,8 +76,12 @@ export class Butterbase {
   }
 
   /** Convenience: ask for JSON and parse it defensively. */
-  async chatJson<T>(messages: ChatMessage[], fallback: T): Promise<T> {
-    const raw = await this.chat(messages, { json: true });
+  async chatJson<T>(
+    messages: ChatMessage[],
+    fallback: T,
+    opts: { maxTokens?: number } = {},
+  ): Promise<T> {
+    const raw = await this.chat(messages, { json: true, maxTokens: opts.maxTokens });
     return safeParseJson<T>(raw, fallback);
   }
 
@@ -75,7 +96,7 @@ export class Butterbase {
       return;
     }
     const base = this.cfg.butterbase.apiUrl.replace(/\/$/, "");
-    const url = `${base}/v1/${this.cfg.butterbase.appId}/data/${table}`;
+    const url = `${base}/v1/${this.cfg.butterbase.appId}/${table}`;
     try {
       await request(url, { method: "POST", headers: this.authHeader(), body: row });
     } catch (err) {
@@ -93,7 +114,7 @@ export class Butterbase {
       return this.memTables.get(table) ?? [];
     }
     const base = this.cfg.butterbase.apiUrl.replace(/\/$/, "");
-    const url = `${base}/v1/${this.cfg.butterbase.appId}/data/${table}`;
+    const url = `${base}/v1/${this.cfg.butterbase.appId}/${table}`;
     try {
       const data = await getJson<any>(url, { headers: this.authHeader() });
       return Array.isArray(data) ? data : data?.rows ?? data?.data ?? [];
@@ -143,6 +164,34 @@ export function safeParseJson<T>(raw: string, fallback: T): T {
         /* fall through */
       }
     }
+    // Salvage a truncated object/array (e.g. max_tokens cutoff) by trimming to
+    // the last complete element and closing open brackets.
+    const salvaged = salvageJson(cleaned);
+    if (salvaged) {
+      try {
+        return JSON.parse(salvaged) as T;
+      } catch {
+        /* fall through */
+      }
+    }
     return fallback;
   }
+}
+
+/** Best-effort repair of JSON truncated mid-stream. */
+function salvageJson(s: string): string | null {
+  if (!s) return null;
+  // Cut to the last complete object boundary "}" that ends an array element.
+  const lastClose = s.lastIndexOf("}");
+  if (lastClose === -1) return null;
+  let core = s.slice(0, lastClose + 1);
+  // Balance brackets by appending the needed closers.
+  const opens = (core.match(/[\[{]/g) ?? []).length;
+  const closes = (core.match(/[\]}]/g) ?? []).length;
+  let deficit = opens - closes;
+  // Close arrays/objects; we don't know exact order, so close objects then arrays.
+  while (deficit-- > 0) core += core.includes('"suggestions"') || core.includes('"fusions"') ? "]" : "}";
+  // Ensure outer object closer if we opened one.
+  if (core.trimStart().startsWith("{") && !core.trimEnd().endsWith("}")) core += "}";
+  return core;
 }

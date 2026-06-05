@@ -8,6 +8,8 @@ export interface MomentumConfig {
   github: {
     username: string;
     token?: string;
+    /** Optional allow-list of repo names to analyze (demo focus). */
+    repos: string[];
   };
   butterbase: {
     apiUrl: string;
@@ -26,10 +28,12 @@ export interface MomentumConfig {
     projectId?: string;
     projectSecret?: string;
     providers: string[];
+    digestTo?: string;
     live: boolean;
   };
   rocketride: {
     engineUrl: string;
+    apiKey: string;
   };
 }
 
@@ -49,12 +53,13 @@ export function loadConfig(): MomentumConfig {
     github: {
       username: process.env.GITHUB_USERNAME || "octocat",
       token: process.env.GITHUB_TOKEN || undefined,
+      repos: csv(process.env.GITHUB_REPOS, []),
     },
     butterbase: {
       apiUrl: process.env.BUTTERBASE_API_URL || "https://api.butterbase.ai",
       appId: butterbaseAppId,
       apiKey: butterbaseApiKey,
-      model: process.env.MOMENTUM_MODEL || "anthropic/claude-3.5-sonnet",
+      model: process.env.MOMENTUM_MODEL || "anthropic/claude-sonnet-4.6",
       live: Boolean(butterbaseApiKey),
     },
     xtrace: {
@@ -66,10 +71,13 @@ export function loadConfig(): MomentumConfig {
       projectId: process.env.SPECTRUM_PROJECT_ID || undefined,
       projectSecret: process.env.SPECTRUM_PROJECT_SECRET || undefined,
       providers: csv(process.env.SPECTRUM_PROVIDERS, ["terminal"]),
+      digestTo: process.env.SPECTRUM_DIGEST_TO || undefined,
       live: Boolean(process.env.SPECTRUM_PROJECT_ID && process.env.SPECTRUM_PROJECT_SECRET),
     },
     rocketride: {
       engineUrl: process.env.ROCKETRIDE_ENGINE_URL || "http://localhost:5565",
+      // Local engine uses the literal key "api_key"; cloud uses a real key.
+      apiKey: process.env.ROCKETRIDE_APIKEY || "api_key",
     },
   };
 }
@@ -81,6 +89,6 @@ export function describeMode(cfg: MomentumConfig): string {
     `github=${cfg.github.token ? "live(auth)" : "live(anon)"}`,
     `butterbase=${flag(cfg.butterbase.live)}`,
     `xtrace=${flag(cfg.xtrace.live)}`,
-    `spectrum=${cfg.spectrum.live ? "live" : "terminal"}`,
+    `spectrum=${cfg.spectrum.live ? `live(${cfg.spectrum.providers.join("+")})` : "terminal"}`,
   ].join("  ");
 }

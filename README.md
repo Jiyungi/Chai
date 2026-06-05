@@ -23,10 +23,10 @@ Momentum's product logic *is* a set of RocketRide pipelines, and every node is b
 
 | Technology | Role in Momentum | Where in code |
 | --- | --- | --- |
-| **RocketRide** | Orchestrates the product as portable `.pipe` DAGs: Repo Radar, Fusion Finder, Weekly Digest. Each run executes a pipeline node-by-node in topological order. | `src/integrations/rocketride.ts`, `src/core/pipelines.ts`, `pipelines/*.pipe` |
-| **Butterbase** | The backend. Its **AI Model Gateway** (OpenAI-compatible) powers all synthesis — improvement suggestions, fusion ideas, agent answers. Its **Data API** persists reports and fusions. | `src/integrations/butterbase.ts` |
-| **XTrace** | The self-revising memory layer. Momentum writes durable facts about each repo after every run; on the next run it recalls them to compute *what actually changed*. | `src/integrations/xtrace.ts` |
-| **Photon (Spectrum)** | Delivery. The agent runs once and reaches users over iMessage / WhatsApp / terminal. Powers the weekly digest broadcast and the interactive Q&A agent. | `src/integrations/spectrum.ts` |
+| **RocketRide** | Orchestrates the product as portable `.pipe` DAGs (Repo Radar, Fusion Finder, Weekly Digest) on the real C++ engine via the official `rocketride` SDK. With `ROCKETRIDE_SYNTHESIS=1`, LLM synthesis runs *inside the engine* on an `llm_openai_api` node pointed at the Butterbase gateway — wiring two required techs together. | `src/integrations/rocketride.ts`, `src/core/pipelines.ts`, `pipelines/*.pipe` |
+| **Butterbase** | The backend. Its **AI Model Gateway** (OpenAI-compatible, `claude-sonnet-4.6`) powers all synthesis. Its **Data API** persists reports and fusions. | `src/integrations/butterbase.ts` |
+| **XTrace** | The self-revising memory layer (`@xtraceai/memory`). Momentum writes durable facts about each repo after every run; on the next run it recalls them to compute *what actually changed*. | `src/integrations/xtrace.ts` |
+| **Photon (Spectrum)** | Delivery via the real `spectrum-ts` SDK. The agent runs once and reaches users over iMessage / WhatsApp / Slack / terminal. Powers the weekly digest send and the interactive Q&A agent. | `src/integrations/spectrum.ts` |
 
 ### The pipelines
 
@@ -47,6 +47,22 @@ Weekly Digest (weekly-digest.pipe)
 ```
 
 Run `npm run provision` to (re)generate the `.pipe` files — they open in the RocketRide VS Code canvas.
+
+### Running the RocketRide engine (optional but recommended)
+
+The pipelines execute in-process by default. To run them on the real RocketRide C++ engine:
+
+```bash
+# Apple Silicon needs --platform linux/amd64 (no arm64 image yet)
+docker run -d --platform linux/amd64 --name rocketride-engine -p 5565:5565 \
+  -v rrdata:/opt/data ghcr.io/rocketride-org/rocketride-engine:latest
+
+# one-time: make the data dir writable by the engine user
+docker exec -u root rocketride-engine sh -lc \
+  'mkdir -p /opt/data/data && chown -R rocketride:rocketride /opt/data'
+```
+
+First boot bootstraps a Python env (~30s). The local engine authenticates with the literal key `api_key` (already the default). Once it's up, Momentum auto-detects it. Set `ROCKETRIDE_SYNTHESIS=1` to route LLM synthesis *through* the engine's `llm_openai_api` node into the Butterbase gateway (slower under emulation, but proves the deepest integration).
 
 ---
 

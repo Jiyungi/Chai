@@ -1,54 +1,50 @@
 {
-  "version": "1.0",
+  "version": 1,
   "name": "fusion-finder",
   "description": "Read the full portfolio of repo reports and propose 2+ project fusions worth turning into a startup.",
-  "nodes": [
+  "source": "reports",
+  "project_id": "momentum-fusion-finder",
+  "components": [
     {
       "id": "reports",
-      "type": "source.dropper",
-      "category": "Source",
-      "label": "All repo reports",
-      "config": {}
-    },
-    {
-      "id": "fuse",
-      "type": "llm.anthropic",
-      "category": "LLM",
-      "label": "Cross-pollinate into startup ideas",
+      "provider": "webhook",
       "config": {
-        "model": "anthropic/claude-3.5-sonnet"
+        "mode": "Source",
+        "type": "webhook"
       }
     },
     {
+      "id": "fuse",
+      "provider": "llm_openai_api",
+      "config": {},
+      "input": [
+        {
+          "lane": "data",
+          "from": "reports"
+        }
+      ]
+    },
+    {
       "id": "rank",
-      "type": "text.transform",
-      "category": "Text",
-      "label": "Rank by venture potential",
-      "config": {}
+      "provider": "tool_http",
+      "config": {},
+      "input": [
+        {
+          "lane": "data",
+          "from": "fuse"
+        }
+      ]
     },
     {
       "id": "store",
-      "type": "infra.export",
-      "category": "Infrastructure",
-      "label": "Persist fusions (Butterbase)",
-      "config": {}
-    }
-  ],
-  "lanes": [
-    {
-      "from": "reports",
-      "to": "fuse",
-      "lane": "data"
-    },
-    {
-      "from": "fuse",
-      "to": "rank",
-      "lane": "data"
-    },
-    {
-      "from": "rank",
-      "to": "store",
-      "lane": "data"
+      "provider": "response",
+      "config": {},
+      "input": [
+        {
+          "lane": "data",
+          "from": "rank"
+        }
+      ]
     }
   ]
 }

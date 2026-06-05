@@ -18,16 +18,24 @@ import { renderReport, renderFusions } from "../lib/render.js";
 async function run() {
   const cfg = loadConfig();
   const engine = new MomentumEngine(cfg);
+  await engine.init();
 
-  header("Momentum demo");
+  header("Chai demo");
   console.log(`mode: ${describeMode(cfg)}\nuser: ${cfg.github.username}\n`);
 
   // 1. RocketRide pipelines
   header("1 · RocketRide — provision pipelines");
   const pipes = await engine.exportPipelines();
   pipes.forEach((p) => console.log(`  wrote ${p}`));
-  const reachable = await engine.rocket.engineReachable();
-  console.log(`  engine @ ${cfg.rocketride.engineUrl}: ${reachable ? "reachable" : "not running (in-process DAG)"}`);
+  console.log(
+    `  engine @ ${cfg.rocketride.engineUrl}: ${
+      engine.engineSynthesis
+        ? "LIVE — LLM synthesis routed through llm_openai_api → Butterbase"
+        : engine.engineReachable
+          ? "LIVE — orchestrating (set ROCKETRIDE_SYNTHESIS=1 to route LLM through it)"
+          : "not running (in-process DAG)"
+    }`,
+  );
 
   // 2. Repo Radar
   header("2 · Repo Radar — inspect + gather signals + synthesize");
@@ -59,10 +67,11 @@ async function run() {
   const agent = new MomentumAgent(engine, reports, fusions);
   for (const q of ["list", "fuse", "which project has the most VC interest?"]) {
     console.log(`\nyou › ${q}`);
-    console.log(`momentum › ${await agent.handle(q)}`);
+    console.log(`chai › ${await agent.handle(q)}`);
   }
 
   console.log("\n✓ Demo complete.\n");
+  await engine.shutdown();
 }
 
 function header(title: string) {

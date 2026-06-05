@@ -8,7 +8,7 @@ import type { Repo, Signal, ImprovementSuggestion, FusionIdea } from "../types.j
  * offline, so output is always useful.
  */
 
-const SYSTEM = `You are Momentum, an expert hacker-mentor and startup scout.
+const SYSTEM = `You are Chai, an expert hacker-mentor and startup scout.
 You read a developer's project plus current open-source, startup, and research
 signals, and you give sharp, concrete, non-generic advice. You prefer specific
 techniques, named tools, and paper titles over vague platitudes. Be honest
@@ -46,17 +46,19 @@ export async function suggestImprovements(
     {
       role: "user",
       content:
-        `${ctx}\n\nReturn JSON: {"suggestions":[{"area":string,"current":string,` +
-        `"proposal":string,"reason":string,"evidence":[string],"effort":"low"|"medium"|"high"}]}. ` +
-        `Give 3-5 suggestions. "evidence" must cite the paper/OSS/startup names or URLs above. ` +
-        `"proposal" must be a concrete change to THIS repo, referencing newer techniques where relevant.`,
+        `${ctx}\n\nReturn ONLY compact JSON (no markdown): {"suggestions":[{"area":string,` +
+        `"current":string,"proposal":string,"reason":string,"evidence":[string],"effort":"low"|"medium"|"high"}]}. ` +
+        `Give exactly 3 suggestions. Keep each field under 30 words. "evidence" must cite the ` +
+        `paper/OSS/startup names or URLs above. "proposal" must be a concrete change to THIS repo.`,
     },
   ];
 
   const fallback = heuristicSuggestions(repo, signals);
-  const parsed = await bb.chatJson<{ suggestions: ImprovementSuggestion[] }>(messages, {
-    suggestions: fallback,
-  });
+  const parsed = await bb.chatJson<{ suggestions: ImprovementSuggestion[] }>(
+    messages,
+    { suggestions: fallback },
+    { maxTokens: 1600 },
+  );
   const out = (parsed.suggestions ?? []).filter((s) => s && s.proposal);
   return out.length ? out : fallback;
 }

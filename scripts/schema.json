@@ -1,0 +1,34 @@
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "method": "tools/call",
+  "params": {
+    "name": "manage_schema",
+    "arguments": {
+      "app_id": "app_zq90bmv2slsj",
+      "action": "apply",
+      "schema": {
+        "tables": {
+          "reports": {
+            "columns": {
+              "id": { "type": "uuid", "primaryKey": true, "default": "gen_random_uuid()" },
+              "repo": { "type": "text", "nullable": false },
+              "signal_count": { "type": "integer" },
+              "suggestion_count": { "type": "integer" },
+              "generated_at": { "type": "timestamptz", "default": "now()" }
+            }
+          },
+          "fusions": {
+            "columns": {
+              "id": { "type": "uuid", "primaryKey": true, "default": "gen_random_uuid()" },
+              "name": { "type": "text", "nullable": false },
+              "repos": { "type": "text" },
+              "score": { "type": "integer" },
+              "generated_at": { "type": "timestamptz", "default": "now()" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
