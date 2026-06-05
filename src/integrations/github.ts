@@ -23,13 +23,20 @@ export class GitHubInspector {
   /** List a user's repos, newest activity first, with light enrichment. */
   async listRepos(limit = 12): Promise<{ repos: Repo[]; live: boolean }> {
     // Sample mode: use the curated portfolio (great for demos / no GH account).
-    if (process.env.MOMENTUM_SAMPLE === "1" || this.cfg.github.username === "sample") {
+    if (
+      process.env.CHAI_SAMPLE === "1" ||
+      process.env.MOMENTUM_SAMPLE === "1" ||
+      this.cfg.github.username === "sample"
+    ) {
       return { repos: sampleRepos(), live: false };
     }
     const user = this.cfg.github.username;
+    // When an explicit allow-list is set, fetch a wide page so named repos are
+    // found even if they aren't among the most recently pushed.
+    const perPage = this.cfg.github.repos.length ? 100 : limit;
     const url = `https://api.github.com/users/${encodeURIComponent(
       user,
-    )}/repos?sort=pushed&per_page=${limit}&type=owner`;
+    )}/repos?sort=pushed&per_page=${perPage}&type=owner`;
     try {
       const raw = await getJson<any[]>(url, { headers: this.headers() });
       const allow = this.cfg.github.repos;
@@ -88,6 +95,50 @@ export class GitHubInspector {
         .map(([lang]) => lang);
     } catch {
       return repo.language ? [repo.language] : [];
+    }
+  }
+
+  /**
+   * Fetch the repo's file tree (paths only) so the Architect can reference real
+   * files in a plan. Returns up to `limit` source-relevant paths.
+   */
+  async fileTree(repo: Repo, limit = 80): Promise<string[]> {
+    const tryBranch = async (branch: string): Promise<string[] | null> => {
+      try {
+        const url = `https://api.github.com/repos/${repo.fullName}/git/trees/${branch}?recursive=1`;
+        const data = await getJson<{ tree?: { path: string; type: string }[] }>(url, {
+          headers: this.headers(),
+        });
+        if (!data.tree) return null;
+        return data.tree
+          .filter((n) => n.type === "blob")
+          .map((n) => n.path)
+          .filter((p) => !/node_modules\/|\.lock$|\.png$|\.jpg$|\.svg$|dist\//.test(p));
+      } catch {
+        return null;
+      }
+    };
+    const paths = (await tryBranch("main")) ?? (await tryBranch("master")) ?? [];
+    return paths.slice(0, limit);
+  }
+
+  /**
+   * Open a GitHub issue with the implementation plan so the work lands in the
+   * repo's tracker (and can be picked up by Copilot/agent workflows). Needs a
+   * token with `repo`/`issues` write scope; returns the issue URL or null.
+   */
+  async createIssue(repoFullName: string, title: string, body: string): Promise<string | null> {
+    if (!this.cfg.github.token) return null;
+    try {
+      const url = `https://api.github.com/repos/${repoFullName}/issues`;
+      const res = await getJson<{ html_url?: string }>(url, {
+        method: "POST",
+        headers: this.headers(),
+        body: { title, body },
+      });
+      return res.html_url ?? null;
+    } catch {
+      return null;
     }
   }
 }

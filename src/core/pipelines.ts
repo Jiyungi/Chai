@@ -11,7 +11,7 @@ import type { MomentumConfig } from "../config.js";
 export const repoRadarPipe: Pipe = {
   name: "repo-radar",
   description:
-    "Inspect a GitHub repo, gather related OSS + startups + papers, synthesize improvement suggestions, write to memory, and persist.",
+    "Inspect a GitHub repo, gather related OSS + startups + papers + social chatter, synthesize improvement suggestions, write to memory, and persist.",
   source: "src",
   components: [
     { id: "src", provider: "webhook", category: "Source", label: "Repo input", config: { mode: "Source", type: "webhook" } },
@@ -19,6 +19,7 @@ export const repoRadarPipe: Pipe = {
     { id: "oss", provider: "search", category: "Search", label: "Related OSS (GitHub search)", input: [{ lane: "data", from: "github" }] },
     { id: "papers", provider: "tool_http", category: "Tool", label: "Related papers (arXiv)", input: [{ lane: "data", from: "github" }] },
     { id: "startups", provider: "tool_http", category: "Tool", label: "Startups + investors (sector KB)", input: [{ lane: "data", from: "github" }] },
+    { id: "social", provider: "tool_http", category: "Tool", label: "What people are saying (Hacker News)", input: [{ lane: "data", from: "github" }] },
     {
       id: "synthesize",
       provider: "llm_openai_api",
@@ -29,6 +30,7 @@ export const repoRadarPipe: Pipe = {
         { lane: "data", from: "oss" },
         { lane: "data", from: "papers" },
         { lane: "data", from: "startups" },
+        { lane: "data", from: "social" },
       ],
     },
     { id: "memory", provider: "tool_http", category: "Memory", label: "Write durable facts (XTrace)", input: [{ lane: "data", from: "synthesize" }] },

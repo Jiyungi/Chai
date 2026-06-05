@@ -22,6 +22,7 @@ export async function suggestImprovements(
   const papers = signals.filter((s) => s.kind === "paper");
   const oss = signals.filter((s) => s.kind === "oss");
   const startups = signals.filter((s) => s.kind === "startup");
+  const social = signals.filter((s) => s.kind === "social");
 
   const ctx = [
     `PROJECT: ${repo.fullName}`,
@@ -39,6 +40,9 @@ export async function suggestImprovements(
     ...startups.map(
       (s) => `- ${s.title} [${s.funding?.stage} ${s.funding?.amount}] backers: ${s.funding?.investors.join(", ")}`,
     ),
+    "",
+    "WHAT PEOPLE ARE SAYING (Hacker News):",
+    ...social.map((s) => `- ${s.title} (${s.engagement?.points ?? 0} pts) :: ${s.url}`),
   ].join("\n");
 
   const messages: ChatMessage[] = [

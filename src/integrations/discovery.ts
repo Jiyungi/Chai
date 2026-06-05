@@ -77,6 +77,78 @@ export class Discovery {
   }
 
   /**
+   * What people are saying — Hacker News discussion related to the repo, via
+   * the free Algolia HN Search API (no key). Returns the highest-engagement
+   * stories/comments matching the repo's topics. This is where dev + founder
+   * discourse and influential voices actually surface.
+   */
+  async relatedSocial(repo: Repo, limit = 4): Promise<Signal[]> {
+    const query = this.socialQuery(repo);
+    if (!query) return [];
+    // Try the focused query; if HN has nothing, broaden to the single most
+    // salient concept word so we still surface relevant discourse when possible.
+    let hits = await this.hnSearch(query, limit);
+    if (hits.length === 0) {
+      const broad = query.split(" ").find((w) => GENERAL_CONCEPTS.has(w));
+      if (broad) hits = await this.hnSearch(broad, limit);
+    }
+    return hits.map((h) => ({
+      kind: "social" as const,
+      title: h.title as string,
+      url: (h.url as string) || `https://news.ycombinator.com/item?id=${h.objectID}`,
+      summary: `${h.points ?? 0} points · ${h.num_comments ?? 0} comments on Hacker News`,
+      source: "hackernews",
+      publishedAt: h.created_at,
+      engagement: {
+        points: h.points ?? 0,
+        comments: h.num_comments ?? 0,
+        author: h.author,
+      },
+      relevance: scoreOverlap(repo, h.title ?? "", []),
+    }));
+  }
+
+  /** Raw HN Algolia search for stories with at least minimal engagement. */
+  private async hnSearch(query: string, limit: number): Promise<any[]> {
+    const url =
+      `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(query)}` +
+      `&tags=story&hitsPerPage=${limit + 4}`;
+    try {
+      const data = await getJson<{ hits: any[] }>(url, {
+        headers: { "User-Agent": "momentum-hackathon-tool" },
+      });
+      return (data.hits ?? []).filter((h) => h.title && (h.points ?? 0) >= 5).slice(0, limit);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Build a topical HN query. Prefers topics, then description, then a few
+   * salient keywords from the README. Falls back to the repo name only if it
+   * looks descriptive (>4 chars and not a single common word), since bare repo
+   * names (e.g. "Yoshi") return irrelevant chatter.
+   */
+  private socialQuery(repo: Repo): string {
+    const topics = (repo.topics ?? []).slice(0, 2).join(" ");
+    if (topics) return topics;
+    if (repo.description) {
+      const concept = conceptWords(repo.description);
+      if (concept) return concept;
+      return keywordsFromText(repo.description, 4);
+    }
+    if (repo.readme) {
+      // Prefer recognized tech concepts so we match real HN discourse, not
+      // project-specific proper nouns.
+      const concept = conceptWords(repo.readme);
+      if (concept) return concept;
+      const fromReadme = keywordsFromText(repo.readme, 4);
+      if (fromReadme) return fromReadme;
+    }
+    return "";
+  }
+
+  /**
    * Startups + the investors who funded them, by sector. Curated knowledge base
    * keyed off repo topics/keywords; the synthesis step can enrich this further.
    */
@@ -107,6 +179,59 @@ function scoreOverlap(repo: Repo, description: string, topics: string[]): number
   let overlap = 0;
   for (const t of theirs) if (t.length > 2 && mine.has(t)) overlap++;
   return Math.min(1, overlap / 6);
+}
+
+/** General tech concepts worth broadening a social search to (must be real
+ *  discourse topics, not project-specific proper nouns). */
+const GENERAL_CONCEPTS = new Set([
+  "agent", "agents", "rag", "memory", "llm", "embeddings", "vector", "retrieval",
+  "transcription", "diarization", "classifier", "vision", "eval", "evals", "prompt",
+  "filter", "filtering", "moderation", "feed", "browser", "extension", "automation",
+  "pipeline", "diffusion", "attention", "inference", "scraper",
+]);
+
+/** Stopword set for crude keyword extraction. */
+const STOPWORDS = new Set([
+  "the", "and", "for", "with", "your", "you", "that", "this", "from", "into", "are",
+  "was", "has", "have", "not", "but", "can", "will", "any", "all", "out", "its", "it's",
+  "each", "one", "use", "uses", "using", "run", "runs", "across", "own", "new", "post",
+  "posts", "read", "reads", "reason", "place", "session", "sessions", "decide", "decides",
+  "whether", "mark", "mute", "author", "feed", "tab", "browser", "client", "side",
+]);
+
+/**
+ * Extract the top-N salient lowercase keywords from free text (README/desc).
+ * Used to build a meaningful social-search query when topics are missing.
+ */
+function keywordsFromText(text: string, n: number): string {
+  const counts = new Map<string, number>();
+  for (const raw of text.toLowerCase().split(/[^a-z0-9+#]+/)) {
+    const w = raw.trim();
+    if (w.length < 4 || STOPWORDS.has(w)) continue;
+    counts.set(w, (counts.get(w) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n)
+    .map(([w]) => w)
+    .join(" ");
+}
+
+/**
+ * Pull the most frequent recognized tech-concept words from text, so the social
+ * query targets real discourse (e.g. "agent memory") instead of project nouns.
+ */
+function conceptWords(text: string, n = 2): string {
+  const counts = new Map<string, number>();
+  for (const raw of text.toLowerCase().split(/[^a-z0-9+#]+/)) {
+    const w = raw.trim();
+    if (GENERAL_CONCEPTS.has(w)) counts.set(w, (counts.get(w) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n)
+    .map(([w]) => w)
+    .join(" ");
 }
 
 function parseArxiv(xml: string, repo: Repo): Signal[] {

@@ -1,6 +1,6 @@
 {
   "jsonrpc": "2.0",
-  "id": 5,
+  "id": 7,
   "method": "tools/call",
   "params": {
     "name": "manage_schema",
@@ -24,6 +24,16 @@
               "name": { "type": "text", "nullable": false },
               "repos": { "type": "text" },
               "score": { "type": "integer" },
+              "generated_at": { "type": "timestamptz", "default": "now()" }
+            }
+          },
+          "plans": {
+            "columns": {
+              "id": { "type": "uuid", "primaryKey": true, "default": "gen_random_uuid()" },
+              "repo": { "type": "text", "nullable": false },
+              "suggestion": { "type": "text" },
+              "feasibility": { "type": "text" },
+              "estimate": { "type": "text" },
               "generated_at": { "type": "timestamptz", "default": "now()" }
             }
           }

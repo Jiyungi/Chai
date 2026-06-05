@@ -17,7 +17,7 @@ export interface Repo {
 
 /** A normalized "thing happening in the world" related to a repo. */
 export interface Signal {
-  kind: "oss" | "startup" | "paper";
+  kind: "oss" | "startup" | "paper" | "social";
   title: string;
   url: string;
   summary: string;
@@ -28,6 +28,12 @@ export interface Signal {
     stage?: string;
     amount?: string;
     investors: string[];
+  };
+  /** Social only: engagement signal (HN points, comments). */
+  engagement?: {
+    points?: number;
+    comments?: number;
+    author?: string;
   };
   /** 0..1 heuristic relevance to the repo. */
   relevance: number;
@@ -48,6 +54,25 @@ export interface RepoReport {
   signals: Signal[];
   suggestions: ImprovementSuggestion[];
   generatedAt: string;
+}
+
+/** A feasibility-checked, file-level implementation plan for one suggestion. */
+export interface ImplementationPlan {
+  repo: string;
+  suggestion: string;
+  /** Architect's verdict on whether this is worth doing now. */
+  feasibility: "high" | "medium" | "low";
+  verdict: string;
+  /** Ordered, concrete steps referencing real files where possible. */
+  steps: string[];
+  /** Files likely to be created or changed. */
+  filesToTouch: string[];
+  risks: string[];
+  /** Papers/repos/posts the plan draws on. */
+  references: string[];
+  estimate: string;
+  /** A ready-to-paste prompt for a coding agent (Codex/Claude Code/Cursor). */
+  agentPrompt: string;
 }
 
 /** A proposed fusion of 2+ repos into a single startup-worthy idea. */

@@ -59,7 +59,7 @@ export function loadConfig(): MomentumConfig {
       apiUrl: process.env.BUTTERBASE_API_URL || "https://api.butterbase.ai",
       appId: butterbaseAppId,
       apiKey: butterbaseApiKey,
-      model: process.env.MOMENTUM_MODEL || "anthropic/claude-sonnet-4.6",
+      model: process.env.CHAI_MODEL || process.env.MOMENTUM_MODEL || "anthropic/claude-sonnet-4.6",
       live: Boolean(butterbaseApiKey),
     },
     xtrace: {

@@ -29,6 +29,10 @@ export class MomentumAgent {
     if (lower.startsWith("fuse") || lower.includes("combine") || lower.includes("startup idea")) {
       return this.renderFusions();
     }
+    // "plan <repo> [n]" → feasibility + file-level plan + coding-agent handoff.
+    if (lower.startsWith("plan")) {
+      return this.planReply(q);
+    }
 
     // Repo-specific deep dive?
     const match = this.reports.find((r) => lower.includes(r.repo.name.toLowerCase()));
@@ -43,10 +47,34 @@ export class MomentumAgent {
   private helpText(): string {
     return [
       "I track your hackathon projects and the world around them. Try:",
-      "  • 'list'         — your analyzed repos",
-      "  • '<repo name>'  — trends + suggestions for that repo",
-      "  • 'fuse'         — startup ideas combining your projects",
+      "  • 'list'              — your analyzed repos",
+      "  • '<repo name>'       — trends + suggestions for that repo",
+      "  • 'plan <repo> [n]'   — feasibility + a ready-to-run coding-agent prompt",
+      "  • 'fuse'              — startup ideas combining your projects",
       "  • or ask anything, e.g. 'which project has the most VC interest?'",
+    ].join("\n");
+  }
+
+  /** Architect handoff over chat: returns verdict + the paste-ready prompt. */
+  private async planReply(q: string): Promise<string> {
+    const parts = q.split(/\s+/).slice(1);
+    const idx = Number(parts.find((p) => /^\d+$/.test(p)) ?? "0") || 0;
+    const nameToken = parts.find((p) => !/^\d+$/.test(p))?.toLowerCase();
+    const report =
+      (nameToken && this.reports.find((r) => r.repo.name.toLowerCase().includes(nameToken))) ||
+      this.reports[0];
+    if (!report) return "Analyze a repo first, then say 'plan <repo>'.";
+    const plan = await this.engine.planFor(report, idx);
+    if (!plan) return `No suggestion #${idx} for ${report.repo.name}.`;
+    const icon = plan.feasibility === "high" ? "🟢" : plan.feasibility === "low" ? "🔴" : "🟡";
+    return [
+      `🏗️ ${report.repo.name}: ${plan.suggestion}`,
+      `${icon} ${plan.feasibility.toUpperCase()} · ${plan.estimate}`,
+      plan.verdict,
+      "",
+      "📋 Paste this into Codex / Claude Code / Cursor:",
+      "—".repeat(20),
+      plan.agentPrompt,
     ].join("\n");
   }
 
@@ -54,6 +82,7 @@ export class MomentumAgent {
     const papers = r.signals.filter((s) => s.kind === "paper").slice(0, 2);
     const startups = r.signals.filter((s) => s.kind === "startup").slice(0, 2);
     const oss = r.signals.filter((s) => s.kind === "oss").slice(0, 2);
+    const social = r.signals.filter((s) => s.kind === "social").slice(0, 2);
     const lines = [`📦 ${r.repo.name} — ${r.repo.description ?? ""}`, ""];
     if (papers.length) {
       lines.push("📄 Recent papers:");
@@ -62,6 +91,10 @@ export class MomentumAgent {
     if (oss.length) {
       lines.push("🔧 Related OSS:");
       oss.forEach((o) => lines.push(`   • ${o.title}`));
+    }
+    if (social.length) {
+      lines.push("🗣️ People are saying:");
+      social.forEach((s) => lines.push(`   • ${s.title} (${s.engagement?.points ?? 0} pts on HN)`));
     }
     if (startups.length) {
       lines.push("💸 Funded startups nearby:");

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "name": "repo-radar",
-  "description": "Inspect a GitHub repo, gather related OSS + startups + papers, synthesize improvement suggestions, write to memory, and persist.",
+  "description": "Inspect a GitHub repo, gather related OSS + startups + papers + social chatter, synthesize improvement suggestions, write to memory, and persist.",
   "source": "src",
   "project_id": "momentum-repo-radar",
   "components": [
@@ -58,6 +58,17 @@
       ]
     },
     {
+      "id": "social",
+      "provider": "tool_http",
+      "config": {},
+      "input": [
+        {
+          "lane": "data",
+          "from": "github"
+        }
+      ]
+    },
+    {
       "id": "synthesize",
       "provider": "llm_openai_api",
       "config": {},
@@ -77,6 +88,10 @@
         {
           "lane": "data",
           "from": "startups"
+        },
+        {
+          "lane": "data",
+          "from": "social"
         }
       ]
     },

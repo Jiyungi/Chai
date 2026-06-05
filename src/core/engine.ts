@@ -6,8 +6,9 @@ import { Memory } from "../integrations/xtrace.js";
 import { Discovery } from "../integrations/discovery.js";
 import { RocketRide } from "../integrations/rocketride.js";
 import { suggestImprovements, findFusions } from "./synthesis.js";
+import { planImprovement } from "./architect.js";
 import { repoRadarPipe, fusionFinderPipe, digestPipe, butterbaseLlmPipe } from "./pipelines.js";
-import type { Repo, Signal, RepoReport, FusionIdea, Digest } from "../types.js";
+import type { Repo, Signal, RepoReport, FusionIdea, Digest, ImplementationPlan } from "../types.js";
 
 /**
  * The Momentum engine. Each public method runs a RocketRide pipeline whose
@@ -86,11 +87,13 @@ export class MomentumEngine {
       .register("oss", async (_ctx, inputs) => this.discovery.relatedOSS(inputs.github as Repo))
       .register("papers", async (_ctx, inputs) => this.discovery.relatedPapers(inputs.github as Repo))
       .register("startups", async (_ctx, inputs) => this.discovery.relatedStartups(inputs.github as Repo))
+      .register("social", async (_ctx, inputs) => this.discovery.relatedSocial(inputs.github as Repo))
       .register("synthesize", async (_ctx, inputs) => {
         const signals: Signal[] = [
           ...((inputs.oss as Signal[]) ?? []),
           ...((inputs.papers as Signal[]) ?? []),
           ...((inputs.startups as Signal[]) ?? []),
+          ...((inputs.social as Signal[]) ?? []),
         ];
         const suggestions = await suggestImprovements(this.bb, repo, signals);
         return { signals, suggestions };
@@ -137,6 +140,33 @@ export class MomentumEngine {
       reports.push(await this.analyzeRepo(repo));
     }
     return { reports, live };
+  }
+
+  /**
+   * Architect agent: turn one improvement suggestion into a feasibility-checked,
+   * file-level implementation plan grounded in the repo's real file tree, plus a
+   * ready-to-paste prompt for a coding agent. `index` picks which suggestion.
+   */
+  async planFor(report: RepoReport, index = 0): Promise<ImplementationPlan | null> {
+    const suggestion = report.suggestions[index];
+    if (!suggestion) return null;
+    const fileTree = await this.github.fileTree(report.repo);
+    const plan = await planImprovement(this.bb, report.repo, suggestion, report.signals, fileTree);
+    // Persist plan metadata so it shows up alongside reports.
+    await this.bb.insert("plans", {
+      repo: report.repo.fullName,
+      suggestion: suggestion.proposal.slice(0, 280),
+      feasibility: plan.feasibility,
+      estimate: plan.estimate,
+      generated_at: new Date().toISOString(),
+    });
+    // Remember the decision so "what changed" can track follow-through.
+    await this.memory.remember(
+      report.repo.fullName,
+      [`[plan] (${plan.feasibility}) ${suggestion.proposal} → ${plan.estimate}`],
+      `plan_${dateStamp()}`,
+    );
+    return plan;
   }
 
   /** Run the Fusion Finder pipeline across reports. */
@@ -219,7 +249,7 @@ function computeChanges(reports: RepoReport[], prior: Map<string, string[]>): Ma
 }
 
 function iconFor(kind: string): string {
-  return kind === "paper" ? "📄" : kind === "startup" ? "💸" : "🔧";
+  return kind === "paper" ? "📄" : kind === "startup" ? "💸" : kind === "social" ? "🗣️" : "🔧";
 }
 
 function renderDigest(
